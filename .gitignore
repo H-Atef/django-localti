@@ -1,0 +1,120 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Django stuff
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+
+# Static files collected by collectstatic
+staticfiles/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# PyCharm
+.idea/
+
+# VSCode
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+
+# Type checking
+.mypy_cache/
+.pyre/
+
+# Ruff / linting
+.ruff_cache/
+
+# Node modules (if using React/Next frontend)
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Redis dump
+dump.rdb
+
+# Docker
+docker-compose.override.yml
+
+# PostgreSQL
+*.pgsql
+
+# Uploaded files
+uploads/
+
+# Cache
+.cache/
+
+# Gunicorn
+gunicorn.pid
+
+# Sentry
+sentry-debug.log
+
+# Temporary files
+tmp/
+temp/
+
+# UV package manager
+.uv/
+
+# Python version manager
+.python-version
+
+
+# Django migrations
+**/migrations/*
+!**/migrations/
+!**/migrations/__init__.py
