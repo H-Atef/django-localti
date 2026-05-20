@@ -1,4 +1,13 @@
-from apps.users.models.user import CustomUser
-from apps.users.models.profile import Profile
+from .user import User
+from .profile import (
+    InfluencerProfile,
+    MarketerProfile,
+    LocalBrandProfile,
+)
 
-__all__ = ['CustomUser', 'Profile']
+__all__ = [
+    "User",
+    "InfluencerProfile",
+    "MarketerProfile",
+    "LocalBrandProfile",
+]
