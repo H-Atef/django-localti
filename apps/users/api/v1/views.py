@@ -150,7 +150,7 @@ class TaggedTokenRefreshView(TokenRefreshView):
 
 
 # ---------------------------------------------------------------------------
-# ✅ User Retrieve APIView - with proper Swagger schema
+#   User Retrieve APIView - with proper Swagger schema
 # ---------------------------------------------------------------------------
 @extend_schema(
     tags=['Users'],
@@ -203,7 +203,7 @@ class UserRetrieveView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# ✅ User Update APIView - with proper Swagger schema
+#   User Update APIView - with proper Swagger schema
 # ---------------------------------------------------------------------------
 @extend_schema(
     tags=['Users'],
@@ -255,7 +255,7 @@ class UserUpdateView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# ✅ User Delete APIView - with proper Swagger schema
+#   User Delete APIView - with proper Swagger schema
 # ---------------------------------------------------------------------------
 @extend_schema(
     tags=['Users'],
@@ -293,7 +293,7 @@ class UserDeleteView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# ✅ Influencer Search View - with proper Swagger schema
+#   Influencer Search View - with proper Swagger schema
 # ---------------------------------------------------------------------------
 @extend_schema(
     tags=['Influencers'],
