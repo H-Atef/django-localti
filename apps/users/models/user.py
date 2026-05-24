@@ -4,6 +4,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 
 from apps.users.helpers.constants import UserRole
+from apps.users.models.managers import UserManager
 
 
 class User(AbstractUser):
@@ -14,6 +15,8 @@ class User(AbstractUser):
     username = models.CharField(max_length=150, unique=True)
 
     role = models.CharField(max_length=30, choices=UserRole.choices)
+
+    objects = UserManager()
 
     phone_number = models.CharField(max_length=20, blank=True, null=True)
 
@@ -36,4 +39,4 @@ class User(AbstractUser):
         ]
 
     def __str__(self):
-        return f"{self.username}{self.email}"
+        return f"{self.username} - {self.email}"

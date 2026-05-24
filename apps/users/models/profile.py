@@ -20,11 +20,13 @@ class InfluencerProfile(models.Model):
 
     niche = models.CharField(max_length=100,blank=True,default="-")
 
+    category = models.CharField(max_length=100, blank=True, default="-")
+
     followers_count = models.PositiveIntegerField(default=0)
 
-    instagram_url = models.URLField(blank=True, null=True)
-    tiktok_url = models.URLField(blank=True, null=True)
-    youtube_url = models.URLField(blank=True, null=True)
+    instagram_url = models.CharField(blank=True, null=True)
+    tiktok_url = models.CharField(blank=True, null=True)
+    youtube_url = models.CharField(blank=True, null=True)
 
     engagement_rate = models.DecimalField(
         max_digits=5,
@@ -82,7 +84,7 @@ class LocalBrandProfile(models.Model):
 
     business_type = models.CharField(max_length=100)
 
-    website = models.URLField(blank=True, null=True)
+    website = models.CharField(blank=True, null=True)
 
     description = models.TextField(blank=True, null=True)
 
