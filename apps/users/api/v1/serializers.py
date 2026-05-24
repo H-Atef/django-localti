@@ -127,6 +127,12 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError("A user with this username already exists.")
         return value
+    
+    def validate_role(self, value):
+        # Prevent admin role assignment via serializer (defense in depth)
+        if value == UserRole.ADMIN:
+            raise serializers.ValidationError("Admin role cannot be assigned via registration.")
+        return value
 
 
 class InfluencerRegisterSerializer(UserRegisterSerializer):
@@ -170,9 +176,6 @@ class LocalBrandRegisterSerializer(UserRegisterSerializer):
         ]
 
 
-class AdminRegisterSerializer(UserRegisterSerializer):
-    class Meta(UserRegisterSerializer.Meta):
-        pass
 
 
 # ---------------------------------------------------------------------------

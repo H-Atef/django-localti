@@ -1,18 +1,16 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from rest_framework import status, viewsets, generics, serializers as drf_serializers
+from django.shortcuts import get_object_or_404
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenRefreshView
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 
 from apps.users.helpers.constants import UserRole
-from apps.users.permissions import IsAdminOrSelf
 from apps.users.services.auth_service import AuthService
 from apps.users.services.user_service import UserService
-
 
 from apps.users.api.v1.serializers import (
     UserSerializer,
@@ -23,7 +21,6 @@ from apps.users.api.v1.serializers import (
     InfluencerRegisterSerializer,
     MarketerRegisterSerializer,
     LocalBrandRegisterSerializer,
-    AdminRegisterSerializer,
 )
 
 User = get_user_model()
@@ -42,17 +39,28 @@ class RegisterView(APIView):
         description=(
             'Register a new user with a role-specific profile. '
             'Send the `role` field to determine which profile fields are required. '
-            'Roles: `influencer`, `marketer`, `local_brand`, `admin`.'
+            'Roles: `influencer`, `marketer`, `local_brand`. Admin registration is restricted.'
         ),
         request={
-            'multipart/form-data': InfluencerRegisterSerializer 
+            'application/json': InfluencerRegisterSerializer,
+            'multipart/form-data': InfluencerRegisterSerializer,
         },
-        responses={201: UserSerializer},
+        responses={
+            201: UserSerializer,
+            400: OpenApiResponse(description='Bad request - validation errors'),
+            403: OpenApiResponse(description='Forbidden - admin registration restricted'),
+        },
     )
     def post(self, request, *args, **kwargs):
         role = request.data.get('role')
         if not role:
             return Response({"role": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        if role == UserRole.ADMIN:
+            return Response(
+                {"role": ["Admin registration is restricted. Contact system administrator."]}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         serializer_class = self._get_serializer_class(role)
         if not serializer_class:
@@ -71,7 +79,6 @@ class RegisterView(APIView):
             UserRole.INFLUENCER: InfluencerRegisterSerializer,
             UserRole.MARKETER: MarketerRegisterSerializer,
             UserRole.LOCAL_BRAND: LocalBrandRegisterSerializer,
-            UserRole.ADMIN: AdminRegisterSerializer,
         }
         return mapping.get(role)
 
@@ -106,7 +113,6 @@ class LoginView(APIView):
             "access": access_token
         }, status=status.HTTP_200_OK)
 
-        # Set refresh token as an httpOnly cookie
         response.set_cookie(
             key='refresh_token',
             value=refresh_token,
@@ -114,7 +120,6 @@ class LoginView(APIView):
             secure=not settings.DEBUG,
             samesite='Lax'
         )
-
         return response
 
 
@@ -136,139 +141,181 @@ class LogoutView(APIView):
         response = Response(result, status=status.HTTP_200_OK)
         response.delete_cookie('refresh_token')
         return response
-    
 
 
-@extend_schema(tags=['Auth'])
+@extend_schema(tags=['Auth'], responses={200: OpenApiResponse(description='Refreshed access token')})
 class TaggedTokenRefreshView(TokenRefreshView):
-    """
-    Refresh access token using the refresh token (sent as httpOnly cookie or request body).
-    """
+    """Refresh access token using the refresh token."""
     pass
 
 
 # ---------------------------------------------------------------------------
-# User CRUD ViewSet
+# ✅ User Retrieve APIView - with proper Swagger schema
 # ---------------------------------------------------------------------------
-@extend_schema_view(
-    list=extend_schema(
-        tags=['Users'],
-        summary='List users',
-        description='Admins see all users. Non-admins see only themselves.',
+@extend_schema(
+    tags=['Users'],
+    summary='Retrieve user(s)',
+    description=(
+        'Non-admins: Returns only their own profile.\n'
+        'Admins: \n'
+        '- No params → returns admin\'s own profile\n'
+        '- `?id=<uuid>` → returns specific user by UUID\n'
+        '- `?all=true` → returns list of all users'
     ),
-    retrieve=extend_schema(
-        tags=['Users'],
-        summary='Retrieve a user by ID',
-        description='Admins can retrieve any user. Non-admins can only retrieve themselves.',
-    ),
-    create=extend_schema(
-        tags=['Users'],
-        summary='Create a user (admin)',
-    ),
-    update=extend_schema(
-        tags=['Users'],
-        summary='Full update a user by ID',
-        request={
-            'multipart/form-data': UserUpdateSerializer  
-        },
-    ),
-    partial_update=extend_schema(
-        tags=['Users'],
-        summary='Partial update a user by ID',
-        request={
-            'multipart/form-data': UserUpdateSerializer  
-        },
-    ),
-    destroy=extend_schema(
-        tags=['Users'],
-        summary='Delete a user by ID',
-    ),
+    parameters=[
+        OpenApiParameter(name='id', description='UUID of user to retrieve (admin only)', type=str, location=OpenApiParameter.QUERY),
+        OpenApiParameter(name='all', description='Return all users (admin only)', type=bool, location=OpenApiParameter.QUERY),
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=UserSerializer(many=True),  # For ?all=true
+            description='Single user object OR {"results": [...], "count": N} for ?all=true'
+        ),
+        404: OpenApiResponse(description='User not found'),
+    },
 )
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [IsAdminOrSelf]
+class UserRetrieveView(APIView):
+    permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        user = self.request.user
-        if user.role == UserRole.ADMIN:
-            return UserService.list_users()
-        return UserService.list_users().filter(id=user.id)
-
-    def get_serializer_class(self):
-        if self.action in ['update', 'partial_update']:
-            return UserUpdateSerializer
-        return UserSerializer
-
-    def perform_update(self, serializer):
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        UserService.delete_user(instance)
-
-    @extend_schema(
-        tags=['Users'],
-        summary='Get / Update / Delete current user (from token)',
-        description='Operates on the authenticated user extracted from the JWT. Supports GET, PUT, PATCH, DELETE.',
-        methods=['GET'],
-        request=None,
-        responses={200: UserSerializer},
-    )
-    @extend_schema(
-        tags=['Users'],
-        methods=['PUT', 'PATCH'],
-        request={
-            'multipart/form-data': UserUpdateSerializer  
-        },
-        responses={200: UserSerializer},
-    )
-    @extend_schema(
-        tags=['Users'],
-        methods=['DELETE'],
-        request=None,
-        responses={204: None},
-    )
-    @action(detail=False, methods=['get', 'put', 'patch', 'delete'], url_path='me')
-    def me(self, request, *args, **kwargs):
-        """Endpoint to get/update/delete the authenticated user's own data from token"""
+    def get(self, request, *args, **kwargs):
         user = request.user
-        if request.method == 'GET':
+        
+        if user.role != UserRole.ADMIN:
+            serializer = UserSerializer(user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        return_all = request.query_params.get('all', '').lower() == 'true'
+        target_id = request.query_params.get('id')
+        
+        if return_all:
+            users = UserService.list_users()
+            serializer = UserSerializer(users, many=True)
+            return Response({"results": serializer.data, "count": users.count()}, status=status.HTTP_200_OK)
+        
+        elif target_id:
+            target_user = get_object_or_404(User, id=target_id)
+            serializer = UserSerializer(target_user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        else:
             serializer = UserSerializer(user)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
-        elif request.method in ['PUT', 'PATCH']:
-            partial = (request.method == 'PATCH')
-            serializer = UserUpdateSerializer(user, data=request.data, partial=partial)
-            serializer.is_valid(raise_exception=True)
-            updated_user = serializer.save()
-            response_serializer = UserSerializer(updated_user)
-            return Response(response_serializer.data, status=status.HTTP_200_OK)
 
-        elif request.method == 'DELETE':
-            UserService.delete_user(user)
-            return Response(status=status.HTTP_204_NO_CONTENT)
+# ---------------------------------------------------------------------------
+# ✅ User Update APIView - with proper Swagger schema
+# ---------------------------------------------------------------------------
+@extend_schema(
+    tags=['Users'],
+    summary='Update user',
+    description=(
+        'Non-admins: Can only update their own profile.\n'
+        'Admins: \n'
+        '- No params → updates admin\'s own profile\n'
+        '- `?id=<uuid>` → updates specific user by UUID'
+    ),
+    parameters=[
+        OpenApiParameter(name='id', description='UUID of user to update (admin only)', type=str, location=OpenApiParameter.QUERY),
+    ],
+    request={
+        'application/json': UserUpdateSerializer,
+        'multipart/form-data': UserUpdateSerializer,
+    },
+    responses={
+        200: UserSerializer,
+        400: OpenApiResponse(description='Validation error'),
+        404: OpenApiResponse(description='User not found'),
+    },
+)
+class UserUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_target_user(self, request):
+        user = request.user
+        if user.role != UserRole.ADMIN:
+            return user
+        target_id = request.query_params.get('id')
+        if target_id:
+            return get_object_or_404(User, id=target_id)
+        return user
+
+    def put(self, request, *args, **kwargs):
+        return self._update(request, partial=False)
+
+    def patch(self, request, *args, **kwargs):
+        return self._update(request, partial=True)
+
+    def _update(self, request, partial=False):
+        target_user = self._get_target_user(request)
+        serializer = UserUpdateSerializer(target_user, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        updated_user = serializer.save()
+        response_serializer = UserSerializer(updated_user)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------
-# Influencer Search View
+# ✅ User Delete APIView - with proper Swagger schema
+# ---------------------------------------------------------------------------
+@extend_schema(
+    tags=['Users'],
+    summary='Delete user',
+    description=(
+        'Non-admins: Can only delete their own account.\n'
+        'Admins: \n'
+        '- No params → deletes admin\'s own account\n'
+        '- `?id=<uuid>` → deletes specific user by UUID'
+    ),
+    parameters=[
+        OpenApiParameter(name='id', description='UUID of user to delete (admin only)', type=str, location=OpenApiParameter.QUERY),
+    ],
+    responses={
+        204: OpenApiResponse(description='Successfully deleted'),
+        404: OpenApiResponse(description='User not found'),
+    },
+)
+class UserDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_target_user(self, request):
+        user = request.user
+        if user.role != UserRole.ADMIN:
+            return user
+        target_id = request.query_params.get('id')
+        if target_id:
+            return get_object_or_404(User, id=target_id)
+        return user
+
+    def delete(self, request, *args, **kwargs):
+        target_user = self._get_target_user(request)
+        UserService.delete_user(target_user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# ✅ Influencer Search View - with proper Swagger schema
 # ---------------------------------------------------------------------------
 @extend_schema(
     tags=['Influencers'],
     summary='Search influencers',
     description='Search influencers by name, category, niche, or any combination.',
     parameters=[
-        OpenApiParameter(name='name', description='Filter by influencer name (username, first or last name)', type=str),
-        OpenApiParameter(name='category', description='Filter by category', type=str),
-        OpenApiParameter(name='niche', description='Filter by niche', type=str),
+        OpenApiParameter(name='name', description='Filter by influencer name', type=str, location=OpenApiParameter.QUERY),
+        OpenApiParameter(name='category', description='Filter by category', type=str, location=OpenApiParameter.QUERY),
+        OpenApiParameter(name='niche', description='Filter by niche', type=str, location=OpenApiParameter.QUERY),
     ],
+    responses={
+        200: OpenApiResponse(response=UserSerializer(many=True), description='List of matching influencers'),
+    },
 )
-class InfluencerSearchView(generics.ListAPIView):
-    serializer_class = UserSerializer
+class InfluencerSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        name = self.request.query_params.get('name')
-        category = self.request.query_params.get('category')
-        niche = self.request.query_params.get('niche')
+    def get(self, request, *args, **kwargs):
+        name = request.query_params.get('name')
+        category = request.query_params.get('category')
+        niche = request.query_params.get('niche')
 
-        return UserService.search_influencers(name=name, category=category, niche=niche)
+        influencers = UserService.search_influencers(name=name, category=category, niche=niche)
+        serializer = UserSerializer(influencers, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
